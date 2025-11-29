@@ -8,6 +8,7 @@ import {
   convertOpenAIStreamToClaude,
   createStreamState,
   getFinalStreamEvents,
+  handleOpenAIErrorResponse,
   TextResponse,
 } from "./converters";
 import {
@@ -74,16 +75,11 @@ async function handleClaudeToOpenAI(c: any) {
 
     // Parse request body
     const rawBody = await c.req.text();
-    console.log("[Handler] Raw request body:", rawBody);
     const claudeRequest = JSON.parse(rawBody);
 
     // Convert to OpenAI format
     console.log("[Handler] Converting Claude request to OpenAI format...");
     const openaiRequest = convertClaudeRequestToOpenAI(claudeRequest);
-    console.log(
-      "[Handler] OpenAI request created:",
-      JSON.stringify(openaiRequest),
-    );
 
     // Determine target URL
     const targetUrl = isGeminiUrl(baseUrl)
@@ -106,6 +102,12 @@ async function handleClaudeToOpenAI(c: any) {
       body: JSON.stringify(openaiRequest),
     });
     console.log("[Handler] Target API response status:", openAIResponse.status);
+
+    if (!openAIResponse.ok) {
+      // 转换错误并返回
+      const claudeError = await handleOpenAIErrorResponse(openAIResponse);
+      return c.json(claudeError, openAIResponse.status);
+    }
 
     // Stream response
     if (openaiRequest.stream) {

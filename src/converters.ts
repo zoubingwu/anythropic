@@ -13,6 +13,18 @@ export interface OpenAIMessage {
   name?: string;
 }
 
+// OpenAI Error Types
+export interface OpenAIError {
+  code?: any;
+  message: string;
+  type?: string;
+  param?: string;
+}
+
+export interface OpenAIErrorResponse {
+  error: OpenAIError;
+}
+
 export interface MessageContent {
   type: "text" | "image_url" | "input_audio";
   text?: string;
@@ -289,6 +301,17 @@ export interface ClaudeStreamResponse {
   delta?: ClaudeDelta;
   usage?: ClaudeUsage;
   index?: number;
+}
+
+// Claude Error Types
+export interface ClaudeError {
+  type: string;
+  message: string;
+}
+
+export interface ClaudeErrorResponse {
+  type: "error";
+  error: ClaudeError;
 }
 
 /**
@@ -1036,5 +1059,89 @@ export function createStreamState(): StreamConversionState {
     contentTexts: [],
     thinkingTexts: [],
     toolCalls: [],
+  };
+}
+
+/**
+ * ============================================================================
+ * Error Conversion: OpenAI → Claude
+ * ============================================================================
+ */
+
+/**
+ * Convert OpenAI error type to Claude error type
+ */
+function convertOpenAIErrorTypeToClaude(openAIType: string): string {
+  switch (openAIType) {
+    case "invalid_request_error":
+      return "invalid_request_error";
+    case "authentication_error":
+      return "authentication_error";
+    case "permission_error":
+      return "permission_error";
+    case "not_found_error":
+      return "not_found_error";
+    case "request_too_large":
+      return "request_too_large";
+    case "rate_limit_error":
+      return "rate_limit_error";
+    case "api_error":
+      return "api_error";
+    case "overloaded_error":
+      return "overloaded_error";
+    default:
+      return openAIType;
+  }
+}
+
+/**
+ * Convert OpenAI error response to Claude error response
+ */
+export function convertOpenAIErrorToClaude(
+  openAIError: OpenAIError,
+  statusCode: number,
+): ClaudeErrorResponse {
+  return {
+    type: "error",
+    error: {
+      type: convertOpenAIErrorTypeToClaude(openAIError.type || "api_error"),
+      message: openAIError.message || "Unknown error",
+    },
+  };
+}
+
+/**
+ * Handle HTTP error response from OpenAI API
+ * This function reads the error response body and converts it to Claude format
+ */
+export async function handleOpenAIErrorResponse(
+  response: Response,
+): Promise<ClaudeErrorResponse> {
+  const contentType = response.headers.get("content-type");
+
+  // Try to parse as JSON error
+  if (contentType && contentType.includes("application/json")) {
+    try {
+      const openAIError = (await response.json()) as OpenAIErrorResponse;
+      return convertOpenAIErrorToClaude(openAIError.error, response.status);
+    } catch (e) {
+      // If parsing fails, return generic error
+      return {
+        type: "error",
+        error: {
+          type: "api_error",
+          message: `HTTP ${response.status}: ${response.statusText}`,
+        },
+      };
+    }
+  }
+
+  // Non-JSON error response
+  return {
+    type: "error",
+    error: {
+      type: "api_error",
+      message: `HTTP ${response.status}: ${response.statusText}`,
+    },
   };
 }
