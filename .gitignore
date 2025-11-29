@@ -1,2 +1,5 @@
 node_modules/
 llm_specs/
+.wrangler/
+
+*.http
