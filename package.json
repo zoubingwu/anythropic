@@ -1,0 +1,19 @@
+{
+  "name": "anythropic",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler deploy --minify src/index.ts",
+    "spec:fetch": "./scripts/spec_fetcher.sh",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "hono": "^4.10.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20251128.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.14",
+    "wrangler": "4.51.0"
+  }
+}
