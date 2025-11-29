@@ -284,11 +284,11 @@ async function handleOpenAIToClaude(c: any) {
 // Main Route Handler
 // ============================================================================
 
-// 统一处理所有 POST 请求
+// Unified handler for all POST requests
 app.post("*", async (c) => {
   const path = c.req.path;
 
-  // 路由分发
+  // Route dispatch based on path endings
   if (path.endsWith("/v1/messages")) {
     return handleClaudeToOpenAI(c);
   } else if (path.endsWith("/v1/chat/completions")) {
