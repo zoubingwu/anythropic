@@ -15,6 +15,7 @@ import {
   convertClaudeToOpenAIChunk,
   createClaudeToOpenAIState,
 } from "./stream";
+import { countClaudeTokens } from "./token";
 
 const app = new Hono();
 
@@ -174,14 +175,59 @@ async function handleClaudeToOpenAI(c: any) {
   }
 }
 
+const handleCountTokens = async (c: any) => {
+  try {
+    const body = await c.req.json();
+
+    // 验证必填字段
+    if (!body.model || !body.messages) {
+      return c.json({ error: "model and messages are required" }, 400);
+    }
+
+    // 计算token数
+    const tokenCount = countClaudeTokens({
+      model: body.model,
+      messages: body.messages,
+      system: body.system,
+      tools: body.tools,
+    });
+
+    // 返回Claude格式响应
+    return c.json({
+      input_tokens: tokenCount,
+    });
+  } catch (error: any) {
+    return c.json({ error: error.message }, 500);
+  }
+};
+
+const handleCountTokensDetailed = async (c: any) => {
+  const body = await c.req.json();
+
+  const tokenCount = countClaudeTokens({
+    model: body.model,
+    messages: body.messages,
+    system: body.system,
+    tools: body.tools,
+  });
+
+  return c.json({
+    input_tokens: tokenCount,
+    model: body.model,
+    message_count: body.messages?.length || 0,
+    has_tools: !!body.tools,
+    has_system: !!body.system,
+  });
+};
+
 app.post("*", async (c) => {
   const path = c.req.path;
   if (path.endsWith("/v1/messages")) {
     return handleClaudeToOpenAI(c);
   } else if (path.endsWith("/v1/messages/count_tokens")) {
-    return c.json({
-      input_tokens: 42,
-    });
+    return handleCountTokens(c);
+  } else if (path.endsWith("/v1/messages/count_tokens/detailed")) {
+    return handleCountTokensDetailed(c);
   } else {
     return c.json(
       { error: "Endpoint not supported. Use /v1/messages for Claude format" },
