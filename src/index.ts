@@ -1,26 +1,24 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { stream } from "hono/streaming";
 import {
+  ChatCompletionsStreamResponse,
   convertClaudeRequestToOpenAI,
-  convertClaudeResponseToOpenAI,
-  convertOpenAIRequestToClaude,
-  convertOpenAIResponseToClaude,
+  convertOpenAINonStreamToClaude,
+  convertOpenAIStreamToClaude,
+  createStreamState,
+  getFinalStreamEvents,
+  TextResponse,
 } from "./converters";
 import {
   convertClaudeToOpenAIChunk,
-  convertOpenAIToClaudeChunk,
   createClaudeToOpenAIState,
-  createOpenAIToClaudeState,
 } from "./stream";
 
 const app = new Hono();
 
 // CORS
 app.use("*", cors());
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
 
 function extractBaseUrl(
   path: string,
@@ -34,12 +32,16 @@ function isGeminiUrl(url: string): boolean {
   return url.includes("generativelanguage.googleapis.com");
 }
 
-// ============================================================================
-// Route Handlers
-// ============================================================================
-
 async function handleClaudeToOpenAI(c: any) {
   try {
+    console.log("[Handler] handleClaudeToOpenAI - Incoming request");
+    console.log("[Handler] URL:", c.req.url);
+    console.log("[Handler] Path:", c.req.path);
+    console.log(
+      "[Handler] Headers:",
+      JSON.stringify(c.req.raw.headers, null, 2),
+    );
+
     // Parse request headers
     const apiKey =
       c.req.header("x-api-key") ||
@@ -67,234 +69,137 @@ async function handleClaudeToOpenAI(c: any) {
       );
     }
 
+    console.log("[Handler] Extracted baseUrl:", baseUrl);
+    console.log("[Handler] Is Gemini URL:", isGeminiUrl(baseUrl));
+
     // Parse request body
-    const claudeRequest = await c.req.json();
+    const rawBody = await c.req.text();
+    console.log("[Handler] Raw request body:", rawBody);
+    const claudeRequest = JSON.parse(rawBody);
 
     // Convert to OpenAI format
+    console.log("[Handler] Converting Claude request to OpenAI format...");
     const openaiRequest = convertClaudeRequestToOpenAI(claudeRequest);
+    console.log(
+      "[Handler] OpenAI request created:",
+      JSON.stringify(openaiRequest),
+    );
 
     // Determine target URL
     const targetUrl = isGeminiUrl(baseUrl)
       ? `https://${baseUrl}/chat/completions`
       : `https://${baseUrl}/v1/chat/completions`;
+    console.log("[Handler] Target URL:", targetUrl);
 
     // Forward to target API
-    const response = await fetch(targetUrl, {
+    console.log("[Handler] Forwarding request to target API...");
+    const requestHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Use appropriate auth header based on target API
+    requestHeaders["Authorization"] = `Bearer ${apiKey}`;
+
+    const openAIResponse = await fetch(targetUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: requestHeaders,
       body: JSON.stringify(openaiRequest),
     });
+    console.log("[Handler] Target API response status:", openAIResponse.status);
 
     // Stream response
     if (openaiRequest.stream) {
-      const encoder = new TextEncoder();
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-      const state = createClaudeToOpenAIState();
+      const state = createStreamState();
+      c.header("Content-Type", "text/event-stream");
 
-      // Read streaming response
-      const reader = response.body!.getReader();
-
-      (async () => {
+      return stream(c, async (streamWriter) => {
+        const reader = openAIResponse.body!.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let finalUsage = undefined;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          // 4. 循环读取 OpenAI 的流式响应
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
 
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") continue;
 
-              if (data === "[DONE]") {
-                await writer.write(encoder.encode("data: [DONE]\n\n"));
-                continue;
-              }
+                // 5. 解析 OpenAI chunk
+                const openAIChunk: ChatCompletionsStreamResponse =
+                  JSON.parse(data);
 
-              try {
-                const claudeChunk = JSON.parse(data);
-                const openaiChunk = convertClaudeToOpenAIChunk(
+                // 6. 存储最后的 usage（用于最后发送）
+                if (openAIChunk.usage) {
+                  finalUsage = openAIChunk.usage;
+                }
+
+                // 7. 转换为 Claude 格式（核心函数！）
+                const claudeEvents = convertOpenAIStreamToClaude(
+                  openAIChunk,
                   state,
-                  claudeChunk,
                 );
 
-                if (openaiChunk) {
-                  await writer.write(
-                    encoder.encode(`data: ${JSON.stringify(openaiChunk)}\n\n`),
+                // 8. 立即发送给客户端（保持流式）
+                for (const event of claudeEvents) {
+                  await streamWriter.write(
+                    `data: ${JSON.stringify(event)}\n\n`,
                   );
                 }
-              } catch (e) {
-                // Parse error, ignore
               }
             }
           }
+
+          // 9. 发送最后的结束事件
+          const finalEvents = getFinalStreamEvents(state, finalUsage);
+          for (const event of finalEvents) {
+            await streamWriter.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
+
+          // 10. 发送结束标记
+          await streamWriter.write("data: [DONE]\n\n");
+        } finally {
+          await streamWriter.close();
         }
-
-        await writer.close();
-      })();
-
-      return new Response(readable, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-        },
       });
     }
 
     // Non-streaming response
-    const data = (await response.json()) as any;
-    const convertedResponse = convertClaudeResponseToOpenAI(data);
+    console.log("[Handler] Processing non-streaming response...");
 
-    return c.json(convertedResponse, response.status as any);
-  } catch (error) {
-    return c.json({ error: { message: "Internal server error" } }, 500 as any);
+    const openAIResult: TextResponse = await openAIResponse.json();
+
+    console.log("[Handler] Response body:", JSON.stringify(openAIResult));
+
+    const claudeResponse = convertOpenAINonStreamToClaude(openAIResult);
+    return c.json(claudeResponse, openAIResponse.status as any);
+  } catch (error: any) {
+    console.error("[Claude→OpenAI] Error in handleClaudeToOpenAI:", error);
+    return c.json(
+      { error: { message: `Internal server error: ${error.message}` } },
+      500 as any,
+    );
   }
 }
 
-async function handleOpenAIToClaude(c: any) {
-  try {
-    // Parse request headers
-    const apiKey =
-      c.req.header("x-api-key") ||
-      c.req.header("authorization")?.replace("Bearer ", "");
-
-    if (!apiKey) {
-      return c.json(
-        { error: { message: "Missing x-api-key or authorization header" } },
-        400 as any,
-      );
-    }
-
-    // Extract base URL from path (e.g., "api.anthropic.com")
-    const baseUrl = extractBaseUrl(c.req.path, "/v1/chat/completions");
-
-    if (!baseUrl) {
-      return c.json(
-        {
-          error: {
-            message:
-              "Could not extract base URL from path. Format: /<base-url>/v1/chat/completions",
-          },
-        },
-        400 as any,
-      );
-    }
-
-    // Parse request body
-    const openaiRequest = await c.req.json();
-
-    // Convert to Claude format
-    const claudeRequest = convertOpenAIRequestToClaude(openaiRequest);
-
-    // Forward to Claude API
-    const response = await fetch(`https://${baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(claudeRequest),
-    });
-
-    // If response error, return as-is
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: { message: "Unknown error" } }));
-      return c.json(errorData, response.status as any);
-    }
-
-    // Stream response
-    if (claudeRequest.stream) {
-      const encoder = new TextEncoder();
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-      const state = createOpenAIToClaudeState();
-
-      // Read OpenAI streaming response
-      const reader = response.body!.getReader();
-
-      (async () => {
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-
-              if (data === "[DONE]") {
-                await writer.write(encoder.encode("data: [DONE]\n\n"));
-                continue;
-              }
-
-              try {
-                const openaiChunk = JSON.parse(data);
-                const claudeEvents = convertOpenAIToClaudeChunk(
-                  state,
-                  openaiChunk,
-                );
-
-                if (claudeEvents) {
-                  await writer.write(encoder.encode(claudeEvents));
-                }
-              } catch (e) {
-                // Parse error, ignore
-              }
-            }
-          }
-        }
-
-        await writer.close();
-      })();
-
-      return new Response(readable, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-        },
-      });
-    }
-
-    // Non-streaming response
-    const data = await response.json();
-    const convertedResponse = convertOpenAIResponseToClaude(data);
-
-    return c.json(convertedResponse, response.status as any);
-  } catch (error) {
-    return c.json({ error: { message: "Internal server error" } }, 500 as any);
-  }
-}
-
-// ============================================================================
-// Main Route Handler
-// ============================================================================
-
-// Unified handler for all POST requests
 app.post("*", async (c) => {
   const path = c.req.path;
 
-  // Route dispatch based on path endings
   if (path.endsWith("/v1/messages")) {
     return handleClaudeToOpenAI(c);
-  } else if (path.endsWith("/v1/chat/completions")) {
-    return handleOpenAIToClaude(c);
   } else {
-    return c.json({ error: "Not found" }, 404);
+    return c.json(
+      { error: "Endpoint not supported. Use /v1/messages for Claude format" },
+      404,
+    );
   }
 });
 
