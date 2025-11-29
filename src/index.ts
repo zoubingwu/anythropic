@@ -35,10 +35,10 @@ function isGeminiUrl(url: string): boolean {
 }
 
 // ============================================================================
-// Worker Entry Point: /v1/messages (Claude → OpenAI)
+// Route Handlers
 // ============================================================================
 
-app.post("*/v1/messages", async (c) => {
+async function handleClaudeToOpenAI(c: any) {
   try {
     // Parse request headers
     const apiKey =
@@ -157,13 +157,9 @@ app.post("*/v1/messages", async (c) => {
   } catch (error) {
     return c.json({ error: { message: "Internal server error" } }, 500 as any);
   }
-});
+}
 
-// ============================================================================
-// Worker Entry Point: /v1/chat/completions (OpenAI → Claude)
-// ============================================================================
-
-app.post("*/v1/chat/completions", async (c) => {
+async function handleOpenAIToClaude(c: any) {
   try {
     // Parse request headers
     const apiKey =
@@ -281,6 +277,24 @@ app.post("*/v1/chat/completions", async (c) => {
     return c.json(convertedResponse, response.status as any);
   } catch (error) {
     return c.json({ error: { message: "Internal server error" } }, 500 as any);
+  }
+}
+
+// ============================================================================
+// Main Route Handler
+// ============================================================================
+
+// 统一处理所有 POST 请求
+app.post("*", async (c) => {
+  const path = c.req.path;
+
+  // 路由分发
+  if (path.endsWith("/v1/messages")) {
+    return handleClaudeToOpenAI(c);
+  } else if (path.endsWith("/v1/chat/completions")) {
+    return handleOpenAIToClaude(c);
+  } else {
+    return c.json({ error: "Not found" }, 404);
   }
 });
 
