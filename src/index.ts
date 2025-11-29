@@ -35,15 +35,6 @@ function isGeminiUrl(url: string): boolean {
 
 async function handleClaudeToOpenAI(c: any) {
   try {
-    console.log("[Handler] handleClaudeToOpenAI - Incoming request");
-    console.log("[Handler] URL:", c.req.url);
-    console.log("[Handler] Path:", c.req.path);
-    console.log(
-      "[Handler] Headers:",
-      JSON.stringify(c.req.raw.headers, null, 2),
-    );
-
-    // Parse request headers
     const apiKey =
       c.req.header("x-api-key") ||
       c.req.header("authorization")?.replace("Bearer ", "");
@@ -70,25 +61,21 @@ async function handleClaudeToOpenAI(c: any) {
       );
     }
 
-    console.log("[Handler] Extracted baseUrl:", baseUrl);
-    console.log("[Handler] Is Gemini URL:", isGeminiUrl(baseUrl));
-
     // Parse request body
     const rawBody = await c.req.text();
     const claudeRequest = JSON.parse(rawBody);
 
     // Convert to OpenAI format
-    console.log("[Handler] Converting Claude request to OpenAI format...");
+
     const openaiRequest = convertClaudeRequestToOpenAI(claudeRequest);
 
     // Determine target URL
     const targetUrl = isGeminiUrl(baseUrl)
       ? `https://${baseUrl}/chat/completions`
       : `https://${baseUrl}/v1/chat/completions`;
-    console.log("[Handler] Target URL:", targetUrl);
 
     // Forward to target API
-    console.log("[Handler] Forwarding request to target API...");
+
     const requestHeaders: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -101,11 +88,10 @@ async function handleClaudeToOpenAI(c: any) {
       headers: requestHeaders,
       body: JSON.stringify(openaiRequest),
     });
-    console.log("[Handler] Target API response status:", openAIResponse.status);
 
     if (!openAIResponse.ok) {
-      // 转换错误并返回
       const claudeError = await handleOpenAIErrorResponse(openAIResponse);
+
       return c.json(claudeError, openAIResponse.status);
     }
 
@@ -175,16 +161,12 @@ async function handleClaudeToOpenAI(c: any) {
     }
 
     // Non-streaming response
-    console.log("[Handler] Processing non-streaming response...");
 
     const openAIResult: TextResponse = await openAIResponse.json();
-
-    console.log("[Handler] Response body:", JSON.stringify(openAIResult));
 
     const claudeResponse = convertOpenAINonStreamToClaude(openAIResult);
     return c.json(claudeResponse, openAIResponse.status as any);
   } catch (error: any) {
-    console.error("[Claude→OpenAI] Error in handleClaudeToOpenAI:", error);
     return c.json(
       { error: { message: `Internal server error: ${error.message}` } },
       500 as any,
@@ -194,9 +176,12 @@ async function handleClaudeToOpenAI(c: any) {
 
 app.post("*", async (c) => {
   const path = c.req.path;
-
   if (path.endsWith("/v1/messages")) {
     return handleClaudeToOpenAI(c);
+  } else if (path.endsWith("/v1/messages/count_tokens")) {
+    return c.json({
+      input_tokens: 42,
+    });
   } else {
     return c.json(
       { error: "Endpoint not supported. Use /v1/messages for Claude format" },
