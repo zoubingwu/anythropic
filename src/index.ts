@@ -203,9 +203,8 @@ async function handleClaudeToOpenAI(c: any) {
 
                 // 8. 立即发送给客户端（保持流式）
                 for (const event of claudeEvents) {
-                  await streamWriter.write(
-                    `data: ${JSON.stringify(event)}\n\n`,
-                  );
+                  await streamWriter.write(`event:${event.type}\n\n`);
+                  await streamWriter.write(`data:${JSON.stringify(event)}\n\n`);
                 }
               }
             }
@@ -214,7 +213,8 @@ async function handleClaudeToOpenAI(c: any) {
           // 9. 发送最后的结束事件
           const finalEvents = getFinalStreamEvents(state, finalUsage);
           for (const event of finalEvents) {
-            await streamWriter.write(`data: ${JSON.stringify(event)}\n\n`);
+            await streamWriter.write(`event:${event.type}\n\n`);
+            await streamWriter.write(`data:${JSON.stringify(event)}\n\n`);
           }
 
           // 10. 发送结束标记
@@ -232,6 +232,7 @@ async function handleClaudeToOpenAI(c: any) {
     const claudeResponse = convertOpenAINonStreamToClaude(openAIResult);
     return c.json(claudeResponse, openAIResponse.status as any);
   } catch (error: any) {
+    console.log("Internal server error: ", error);
     return c.json(
       { error: { message: `Internal server error: ${error.message}` } },
       500 as any,
