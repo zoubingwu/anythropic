@@ -32,6 +32,32 @@ export ANTHROPIC_MODEL=grok-code-fast-1
 export ANTHROPIC_SMALL_FAST_MODEL=grok-code-fast-1
 ```
 
+You can setup a util function in your, for example, .zshrc, then use `cc copliot` or `cc gemini` to start your Claude Code with selected model provider:
+
+```bash
+cc() {
+  case $1 in
+    gemini)
+        export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/generativelanguage.googleapis.com/v1beta/openai"
+        ...
+        claude
+        ;;
+    openai)
+        export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/api.openai.com"
+        ...
+        claude
+        ;;
+    copilot)
+        export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/api.githubcopilot.com"
+        ...
+        claude
+        ;;
+    *)
+        echo "Unknown option: $1"
+        ;;
+  esac
+}
+```
 
 ## Self-host
 
