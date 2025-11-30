@@ -1,10 +1,41 @@
-# anythropic
+# Anythropic
 
-Use Any model as Anthropic. Any-thropic is a bidirectional proxy that makes any AI API work like Anthropic's Claude API. Perfect for using OpenAI compatible models in Claude Code and Claude Agent SDK, or using Claude models in Codex and other OpenAI compatible tools.
+Use Any model as Anthropic. Any-thropic is a proxy that makes any AI API work like Anthropic's Claude API. Perfect for using OpenAI compatible models in Claude Code.
 
 **Any + Anthropic = anythropic**
 
-## Deploy
+## Usage
+
+Just set env variables, use `{worker_host}/{original_base_url}` format for your ANTHROPIC_BASE_URL.
+
+> [!NOTE]
+> It is recommended to deploy to your own Cloudflare Worker for complete control and privacy.
+> Or Use `anythropic.web7.workers.dev` if you prefer. We don't store or log anything now, and never will. Code is 100% open source
+
+```bash
+# for gemini
+export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/generativelanguage.googleapis.com/v1beta/openai"
+export ANTHROPIC_AUTH_TOKEN=your Gemini API key
+export ANTHROPIC_MODEL="gemini-3-pro-preview"
+export ANTHROPIC_SMALL_FAST_MODEL="gemini-2.5-flash"
+
+# for openai
+export ANTHROPIC_BASE_URL="http://anythropic.web7.workers.dev/api.openai.com"
+export ANTHROPIC_AUTH_TOKEN=$OPENAI_API_KEY
+export ANTHROPIC_MODEL=gpt-5
+export ANTHROPIC_SMALL_FAST_MODEL=gpt-5-mini
+
+# for copilot
+export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/api.githubcopilot.com"
+export ANTHROPIC_AUTH_TOKEN=you personal access token
+export ANTHROPIC_MODEL=grok-code-fast-1
+export ANTHROPIC_SMALL_FAST_MODEL=grok-code-fast-1
+```
+
+
+## Self-host
+
+Deploy to cloudflare worker:
 
 ```bash
 pnpm install
@@ -12,65 +43,11 @@ pnpm wrangler login
 pnpm run deploy
 ```
 
-## Usage
-
-### Use Gemini in Claude Code
-
-Set env variables:
-
-```bash
-export ANTHROPIC_BASE_URL="https://your-worker.workers.dev/generativelanguage.googleapis.com/v1beta/openai"
-export ANTHROPIC_AUTH_TOKEN="..."  # Gemini API key
-export ANTHROPIC_MODEL="gemini-3-pro-preview"
-export ANTHROPIC_SMALL_FAST_MODEL="gemini-2.5-flash"
-```
-
-### Use Claude in OpenAI Codex
-
-```
-[model_providers.claude]
-name = "Claude"
-base_url = "https://your-worker.workers.dev/api.anthropic.com/"
-env_http_headers = { "x-api-key" = "claude api key" }
-```
-
-### How It Works
-
-The worker extracts the target API URL from the request path:
-
-```
-
-https://worker.workers.dev/{target-api-url}/{endpoint}
-
-```
-
-Examples:
-
-- Claude Code send request to `https://your-worker.workers.dev/generativelanguage.googleapis.com/v1beta/openai/v1/messages`
-- The worker extract information and transform payload and send request to `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
-- The worker receives response from Gemini then transform it to Claude format and respond back to Claude Code
-
-No configuration needed.
-
-## Development
+Or running locally:
 
 ```bash
 pnpm install
-pnpm run dev
-pnpm tsc --noEmit
-pnpm run deploy
-```
-
-## Project Structure
-
-```
-your-worker/
-├── src/
-│   └── index.ts
-├── package.json
-├── tsconfig.json
-├── wrangler.toml
-└── README.md
+pnpm dev
 ```
 
 ## License
