@@ -155,7 +155,6 @@ export interface ChatCompletionsStreamResponse {
   usage?: ChatUsage;
 }
 
-// Claude API Types
 export interface ClaudeCacheControl {
   type: "ephemeral";
   ttl?: string; // "5m" | "1h"
@@ -180,11 +179,6 @@ export interface ClaudeContent {
   tool_use_id?: string;
   cache_control?: ClaudeCacheControl;
   signature?: string;
-}
-
-export interface ClaudeMessage {
-  role: "user" | "assistant";
-  content: ClaudeContent[];
 }
 
 export interface ClaudeAnyContentMessage {
@@ -302,7 +296,6 @@ export interface ClaudeStreamResponse {
   index?: number;
 }
 
-// Claude Error Types
 export interface ClaudeError {
   type: string;
   message: string;
@@ -312,12 +305,6 @@ export interface ClaudeErrorResponse {
   type: "error";
   error: ClaudeError;
 }
-
-/**
- * ============================================================================
- * Constants
- * ============================================================================
- */
 
 const CLAUDE_CONTENT_TYPES = {
   TEXT: "text",
