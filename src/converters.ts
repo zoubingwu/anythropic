@@ -13,16 +13,27 @@ export interface OpenAIMessage {
   name?: string;
 }
 
-// OpenAI Error Types
-export interface OpenAIError {
+type OpenAIErrorFromGemini = {
   code: number;
   message: string;
   status: string;
-}
+};
 
-export type OpenAIErrorResponse = {
-  error: OpenAIError;
-}[];
+// OpenAI Error Types
+export type OpenAIError = {
+  message: string;
+  type: string;
+  param: string;
+  code: string;
+};
+
+export type OpenAIErrorResponse =
+  | {
+      error: OpenAIErrorFromGemini;
+    }[]
+  | {
+      error: OpenAIError;
+    };
 
 export interface MessageContent {
   type: "text" | "image_url" | "input_audio";
@@ -299,6 +310,8 @@ export interface ClaudeStreamResponse {
 export interface ClaudeError {
   type: string;
   message: string;
+  param?: string;
+  code?: string;
 }
 
 export interface ClaudeErrorResponse {
@@ -364,7 +377,7 @@ export function convertClaudeRequestToOpenAI(
 
   // Set optional parameters
   if (claudeRequest.max_tokens !== undefined) {
-    openAIRequest.max_tokens = claudeRequest.max_tokens;
+    openAIRequest.max_completion_tokens = claudeRequest.max_tokens;
   }
   if (claudeRequest.max_completion_tokens !== undefined) {
     openAIRequest.max_completion_tokens = claudeRequest.max_completion_tokens;
@@ -1086,11 +1099,25 @@ function convertOpenAIErrorTypeToClaude(openAIType: string): string {
 export function convertOpenAIErrorToClaude(
   openAIError: OpenAIErrorResponse,
 ): ClaudeErrorResponse {
+  if (Array.isArray(openAIError)) {
+    return {
+      type: "error",
+      error: {
+        type: convertOpenAIErrorTypeToClaude("api_error"),
+        message: openAIError[0].error.message || "Unknown error",
+      },
+    };
+  }
+
   return {
     type: "error",
     error: {
-      type: convertOpenAIErrorTypeToClaude("api_error"),
-      message: openAIError[0].error.message || "Unknown error",
+      type: convertOpenAIErrorTypeToClaude(
+        openAIError.error.type || "api_error",
+      ),
+      message: openAIError.error.message || "Unknown error",
+      param: openAIError.error.param || "",
+      code: openAIError.error.code || "",
     },
   };
 }
@@ -1103,15 +1130,14 @@ export async function handleOpenAIErrorResponse(
   response: Response,
 ): Promise<ClaudeErrorResponse> {
   const contentType = response.headers.get("content-type");
+  console.log("Error contentType: ", contentType);
 
-  // Try to parse as JSON error
   if (contentType && contentType.includes("application/json")) {
     try {
       const openAIError = (await response.json()) as OpenAIErrorResponse;
       console.log("openAIError: ", openAIError);
       return convertOpenAIErrorToClaude(openAIError);
     } catch (e) {
-      // If parsing fails, return generic error
       return {
         type: "error",
         error: {
@@ -1120,6 +1146,16 @@ export async function handleOpenAIErrorResponse(
         },
       };
     }
+  } else if (contentType && contentType.includes("text/plain")) {
+    const text = await response.text();
+    console.log("Error text: ", text);
+    return {
+      type: "error",
+      error: {
+        type: "api_error",
+        message: text,
+      },
+    };
   }
 
   // Non-JSON error response
