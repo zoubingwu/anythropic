@@ -72,6 +72,18 @@ function isCopilot(url: string): boolean {
   return url.includes("api.githubcopilot.com");
 }
 
+function isOpenAI(url: string): boolean {
+  return url.includes("api.openai.com");
+}
+
+function getChatCompletionPath(baseUrl: string) {
+  if (isGeminiUrl(baseUrl) || isCopilot(baseUrl)) {
+    return "/chat/completions";
+  }
+
+  return "/v1/chat/completions";
+}
+
 async function handleClaudeToOpenAI(c: any) {
   try {
     const apiKey =
@@ -107,14 +119,10 @@ async function handleClaudeToOpenAI(c: any) {
     // Convert to OpenAI format
 
     const openaiRequest = convertClaudeRequestToOpenAI(claudeRequest);
-    const forCopilot = isCopilot(baseUrl);
-    const forGemini = isGeminiUrl(baseUrl);
 
-    // Determine target URL
-    const targetUrl =
-      forGemini || forCopilot
-        ? `https://${baseUrl}/chat/completions`
-        : `https://${baseUrl}/v1/chat/completions`;
+    const targetUrl = `https://${baseUrl}${getChatCompletionPath(baseUrl)}`;
+
+    console.log("targetUrl: ", targetUrl);
 
     // Forward to target API
 
@@ -122,7 +130,7 @@ async function handleClaudeToOpenAI(c: any) {
       "Content-Type": "application/json",
     };
 
-    if (forCopilot) {
+    if (isCopilot(baseUrl)) {
       const realToken = await getCopilotToken(apiKey);
       requestHeaders["Copilot-Integration-Id"] = "vscode-chat";
       requestHeaders["Editor-Version"] = "vscode/1.95.3";
@@ -139,10 +147,12 @@ async function handleClaudeToOpenAI(c: any) {
       requestHeaders["Authorization"] = `Bearer ${apiKey}`;
     }
 
+    const body = JSON.stringify(openaiRequest);
+
     const openAIResponse = await fetch(targetUrl, {
       method: "POST",
       headers: requestHeaders,
-      body: JSON.stringify(openaiRequest),
+      body,
     });
 
     if (!openAIResponse.ok) {
