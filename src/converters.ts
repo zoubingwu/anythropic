@@ -15,15 +15,14 @@ export interface OpenAIMessage {
 
 // OpenAI Error Types
 export interface OpenAIError {
-  code?: any;
+  code: number;
   message: string;
-  type?: string;
-  param?: string;
+  status: string;
 }
 
-export interface OpenAIErrorResponse {
+export type OpenAIErrorResponse = {
   error: OpenAIError;
-}
+}[];
 
 export interface MessageContent {
   type: "text" | "image_url" | "input_audio";
@@ -1098,14 +1097,13 @@ function convertOpenAIErrorTypeToClaude(openAIType: string): string {
  * Convert OpenAI error response to Claude error response
  */
 export function convertOpenAIErrorToClaude(
-  openAIError: OpenAIError,
-  statusCode: number,
+  openAIError: OpenAIErrorResponse,
 ): ClaudeErrorResponse {
   return {
     type: "error",
     error: {
-      type: convertOpenAIErrorTypeToClaude(openAIError.type || "api_error"),
-      message: openAIError.message || "Unknown error",
+      type: convertOpenAIErrorTypeToClaude("api_error"),
+      message: openAIError[0].error.message || "Unknown error",
     },
   };
 }
@@ -1123,7 +1121,8 @@ export async function handleOpenAIErrorResponse(
   if (contentType && contentType.includes("application/json")) {
     try {
       const openAIError = (await response.json()) as OpenAIErrorResponse;
-      return convertOpenAIErrorToClaude(openAIError.error, response.status);
+      console.log("openAIError: ", openAIError);
+      return convertOpenAIErrorToClaude(openAIError);
     } catch (e) {
       // If parsing fails, return generic error
       return {
