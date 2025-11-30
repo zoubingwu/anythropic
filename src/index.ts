@@ -34,6 +34,10 @@ function isGeminiUrl(url: string): boolean {
   return url.includes("generativelanguage.googleapis.com");
 }
 
+function isCopilot(url: string): boolean {
+  return url.includes("api.githubcopilot.com");
+}
+
 async function handleClaudeToOpenAI(c: any) {
   try {
     const apiKey =
@@ -69,17 +73,32 @@ async function handleClaudeToOpenAI(c: any) {
     // Convert to OpenAI format
 
     const openaiRequest = convertClaudeRequestToOpenAI(claudeRequest);
+    const forCopilot = isCopilot(baseUrl);
+    const forGemini = isGeminiUrl(baseUrl);
 
     // Determine target URL
-    const targetUrl = isGeminiUrl(baseUrl)
-      ? `https://${baseUrl}/chat/completions`
-      : `https://${baseUrl}/v1/chat/completions`;
+    const targetUrl =
+      forGemini || forCopilot
+        ? `https://${baseUrl}/chat/completions`
+        : `https://${baseUrl}/v1/chat/completions`;
 
     // Forward to target API
 
     const requestHeaders: Record<string, string> = {
       "Content-Type": "application/json",
     };
+
+    if (forCopilot) {
+      requestHeaders["Copilot-Integration-Id"] = "vscode-chat";
+      requestHeaders["Editor-Version"] = "vscode/1.95.3";
+      requestHeaders["Editor-Plugin-Version"] = "copilot-chat/0.26.7";
+      requestHeaders["User-Agent"] = `GitHubCopilotChat/0.26.7`;
+      requestHeaders["Openai-Intent"] = "conversation-panel";
+      requestHeaders["X-Github-Api-Version"] = "2025-04-01";
+      requestHeaders["X-Request-Id"] = `${crypto.randomUUID()}`;
+      requestHeaders["X-Vscode-User-Agent-Library-Version"] = "electron-fetch";
+      requestHeaders["X-Initiator"] = "user";
+    }
 
     // Use appropriate auth header based on target API
     requestHeaders["Authorization"] = `Bearer ${apiKey}`;
@@ -92,7 +111,6 @@ async function handleClaudeToOpenAI(c: any) {
 
     if (!openAIResponse.ok) {
       const claudeError = await handleOpenAIErrorResponse(openAIResponse);
-
       return c.json(claudeError, openAIResponse.status);
     }
 
