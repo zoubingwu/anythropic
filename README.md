@@ -76,6 +76,13 @@ pnpm install
 pnpm dev
 ```
 
+Then replace the worker_host in your env with your own worker or localhost.
+
+## Inspiration and appreciation
+
+- https://github.com/labring/aiproxy
+- https://github.com/1rgs/claude-code-proxy
+
 ## License
 
 MIT
