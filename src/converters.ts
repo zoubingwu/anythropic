@@ -258,6 +258,8 @@ export interface ClaudeUsage {
     web_search_requests?: number;
     execution_time_seconds?: number;
   };
+  service_tier?: string;
+  prompt_tokens?: number;
 }
 
 export interface ClaudeResponse {
@@ -271,7 +273,8 @@ export interface ClaudeResponse {
     | "max_tokens"
     | "tool_use"
     | "stop_sequence"
-    | string;
+    | string
+    | null;
   stop_sequence?: string | null;
   usage: ClaudeUsage;
 }
@@ -283,7 +286,7 @@ export interface ClaudeDelta {
     | "tool_use"
     | "stop_sequence"
     | string;
-  stop_sequence?: string;
+  stop_sequence?: string | null;
   type?: string;
   thinking?: string;
   signature?: string;
@@ -779,8 +782,10 @@ function convertOpenAIUsageToClaude(usage?: ChatUsage): ClaudeUsage {
   }
 
   const claudeUsage: ClaudeUsage = {
+    ...usage,
     input_tokens: usage.prompt_tokens || 0,
     output_tokens: usage.completion_tokens || 0,
+    prompt_tokens: usage.prompt_tokens || 0,
   };
 
   if (usage.prompt_tokens_details) {
@@ -859,7 +864,8 @@ export function convertOpenAIStreamToClaude(
         usage: openAIResponse.usage
           ? convertOpenAIUsageToClaude(openAIResponse.usage)
           : { input_tokens: 0, output_tokens: 0 },
-        stop_reason: CLAUDE_STOP_REASONS.END_TURN,
+        stop_reason: null,
+        stop_sequence: null,
       },
     });
 
@@ -1034,6 +1040,7 @@ export function getFinalStreamEvents(
     type: CLAUDE_STREAM_TYPES.MESSAGE_DELTA,
     delta: {
       stop_reason: CLAUDE_STOP_REASONS.END_TURN,
+      stop_sequence: null,
     },
     usage: usage ? convertOpenAIUsageToClaude(usage) : undefined,
   });
