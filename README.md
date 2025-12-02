@@ -20,7 +20,7 @@ export ANTHROPIC_MODEL="gemini-3-pro-preview"
 export ANTHROPIC_SMALL_FAST_MODEL="gemini-2.5-flash"
 
 # for openai
-export ANTHROPIC_BASE_URL="http://anythropic.web7.workers.dev/api.openai.com"
+export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/api.openai.com"
 export ANTHROPIC_AUTH_TOKEN=$OPENAI_API_KEY
 export ANTHROPIC_MODEL=gpt-5
 export ANTHROPIC_SMALL_FAST_MODEL=gpt-5-mini
