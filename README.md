@@ -32,6 +32,10 @@ export ANTHROPIC_MODEL=grok-code-fast-1
 export ANTHROPIC_SMALL_FAST_MODEL=grok-code-fast-1
 ```
 
+> [!TIP]
+> To get your personal access token for Copilot, you can install the [GitHub Copilot CLI](https://github.com/cli/cli), then run `/login`. The token can be found in `~/.config/github-copilot/apps.json`.
+
+
 You can setup a util function in your, for example, .zshrc, then use `cc copliot` or `cc gemini` to start your Claude Code with selected model provider:
 
 ```bash
