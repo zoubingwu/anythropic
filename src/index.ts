@@ -122,8 +122,6 @@ async function handleClaudeToOpenAI(c: any) {
 
     const targetUrl = `https://${baseUrl}${getChatCompletionPath(baseUrl)}`;
 
-    console.log("targetUrl: ", targetUrl);
-
     // Forward to target API
 
     const requestHeaders: Record<string, string> = {
@@ -203,8 +201,9 @@ async function handleClaudeToOpenAI(c: any) {
 
                 // 8. 立即发送给客户端（保持流式）
                 for (const event of claudeEvents) {
-                  await streamWriter.write(`event:${event.type}\n\n`);
-                  await streamWriter.write(`data:${JSON.stringify(event)}\n\n`);
+                  await streamWriter.write(
+                    `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  );
                 }
               }
             }
@@ -213,8 +212,9 @@ async function handleClaudeToOpenAI(c: any) {
           // 9. 发送最后的结束事件
           const finalEvents = getFinalStreamEvents(state, finalUsage);
           for (const event of finalEvents) {
-            await streamWriter.write(`event:${event.type}\n\n`);
-            await streamWriter.write(`data:${JSON.stringify(event)}\n\n`);
+            await streamWriter.write(
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+            );
           }
 
           // 10. 发送结束标记

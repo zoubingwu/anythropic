@@ -136,10 +136,19 @@ export interface TextResponse {
       content?: string | null;
       reasoning_content?: string;
       tool_calls?: ToolCall[];
+      annotations?: Annotation[]; // Added: support for annotations
     };
     finish_reason: "stop" | "length" | "tool_calls" | "content_filter" | string;
   }>;
   usage?: ChatUsage;
+}
+
+// New: Annotation type for web search results
+export interface Annotation {
+  url_citation: {
+    title: string;
+    url: string;
+  };
 }
 
 export interface ChatCompletionsStreamResponse {
@@ -179,7 +188,14 @@ export interface ClaudeImageSource {
 }
 
 export interface ClaudeContent {
-  type: "text" | "thinking" | "tool_use" | "tool_result" | "image";
+  type:
+    | "text"
+    | "thinking"
+    | "tool_use"
+    | "tool_result"
+    | "image"
+    | "server_tool_use"
+    | "web_search_tool_result";
   text?: string;
   thinking?: string;
   source?: ClaudeImageSource;
@@ -328,6 +344,8 @@ const CLAUDE_CONTENT_TYPES = {
   TOOL_USE: "tool_use",
   TOOL_RESULT: "tool_result",
   IMAGE: "image",
+  SERVER_TOOL_USE: "server_tool_use",
+  WEB_SEARCH_TOOL_RESULT: "web_search_tool_result",
 } as const;
 
 const CLAUDE_STOP_REASONS = {
@@ -350,6 +368,7 @@ const CLAUDE_STREAM_TYPES = {
 const CLAUDE_DELTA_TYPES = {
   TEXT_DELTA: "text_delta",
   THINKING_DELTA: "thinking_delta",
+  SIGNATURE_DELTA: "signature_delta",
   INPUT_JSON_DELTA: "input_json_delta",
 } as const;
 
@@ -432,19 +451,25 @@ export function convertClaudeRequestToOpenAI(
  */
 function convertClaudeSystemToOpenAI(system: ClaudeContent[]): OpenAIMessage[] {
   const messages: OpenAIMessage[] = [];
-  const systemTexts: string[] = [];
 
-  for (const content of system) {
-    if (content.type === "text" && content.text) {
-      systemTexts.push(content.text);
+  if (system.length > 0) {
+    const content: MessageContent[] = [];
+
+    for (const item of system) {
+      if (item.type === "text" && item.text) {
+        content.push({
+          type: "text",
+          text: item.text,
+        });
+      }
     }
-  }
 
-  if (systemTexts.length > 0) {
-    messages.push({
-      role: "system",
-      content: systemTexts.join("\n"),
-    });
+    if (content.length > 0) {
+      messages.push({
+        role: "system",
+        content,
+      });
+    }
   }
 
   return messages;
@@ -490,6 +515,10 @@ interface ConvertedContent {
   content?: string | MessageContent[] | null;
   toolCalls?: ToolCall[];
   toolMessages?: OpenAIMessage[];
+  thinking?: {
+    content: string;
+    signature?: string;
+  };
 }
 
 /**
@@ -520,10 +549,10 @@ function convertClaudeContentArray(
 
       case "thinking":
         if (content.thinking) {
-          messageContents.push({
-            type: "text",
-            text: content.thinking,
-          });
+          result.thinking = {
+            content: content.thinking,
+            signature: content.signature,
+          };
         }
         break;
 
@@ -699,6 +728,27 @@ export function convertOpenAINonStreamToClaude(
   for (const choice of openAIResponse.choices) {
     const message = choice.message;
 
+    if (message.annotations && message.annotations.length > 0) {
+      const id = `srvtoolu_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      claudeResponse.content.push({
+        type: "server_tool_use",
+        id,
+        name: "web_search",
+        input: { query: "" },
+      });
+      claudeResponse.content.push({
+        type: "web_search_tool_result",
+        tool_use_id: id,
+        content: message.annotations.map((item) => {
+          return {
+            type: "web_search_result",
+            url: item.url_citation.url,
+            title: item.url_citation.title,
+          };
+        }),
+      });
+    }
+
     // Handle reasoning content (for o1 models)
     if (message.reasoning_content) {
       claudeResponse.content.push({
@@ -772,6 +822,7 @@ export function convertOpenAINonStreamToClaude(
 
 /**
  * Convert OpenAI usage to Claude usage
+ * FIX: Match LLMS implementation - subtract cached_tokens from input_tokens
  */
 function convertOpenAIUsageToClaude(usage?: ChatUsage): ClaudeUsage {
   if (!usage) {
@@ -781,11 +832,13 @@ function convertOpenAIUsageToClaude(usage?: ChatUsage): ClaudeUsage {
     };
   }
 
+  // FIX: Remove ...usage to avoid extraneous fields
+  // FIX: input_tokens = prompt_tokens - cached_tokens (not just prompt_tokens)
   const claudeUsage: ClaudeUsage = {
-    ...usage,
-    input_tokens: usage.prompt_tokens || 0,
+    input_tokens:
+      (usage.prompt_tokens || 0) -
+      (usage.prompt_tokens_details?.cached_tokens || 0),
     output_tokens: usage.completion_tokens || 0,
-    prompt_tokens: usage.prompt_tokens || 0,
   };
 
   if (usage.prompt_tokens_details) {
@@ -793,6 +846,12 @@ function convertOpenAIUsageToClaude(usage?: ChatUsage): ClaudeUsage {
       usage.prompt_tokens_details.cached_tokens || 0;
     claudeUsage.cache_creation_input_tokens =
       usage.prompt_tokens_details.cache_creation_tokens || 0;
+  }
+
+  if (usage.web_search_count) {
+    claudeUsage.server_tool_use = {
+      web_search_requests: usage.web_search_count,
+    };
   }
 
   return claudeUsage;
@@ -819,7 +878,7 @@ function convertFinishReasonToClaude(finishReason: string): string {
 /**
  * Stream state for tracking conversion progress
  */
-interface StreamConversionState {
+export interface StreamConversionState {
   messageId: string;
   sentMessageStart: boolean;
   currentContentIndex: number;
@@ -836,7 +895,6 @@ interface StreamConversionState {
 
 /**
  * Convert OpenAI streaming response to Claude streaming responses
- * This returns an array of Claude stream events
  */
 export function convertOpenAIStreamToClaude(
   openAIResponse: ChatCompletionsStreamResponse,
@@ -881,6 +939,16 @@ export function convertOpenAIStreamToClaude(
 
     // Handle reasoning/thinking content
     if (delta.reasoning_content) {
+      if (
+        state.currentContentType !== null &&
+        state.currentContentType !== CLAUDE_CONTENT_TYPES.THINKING
+      ) {
+        events.push({
+          type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
+          index: state.currentContentIndex,
+        });
+      }
+
       if (state.currentContentType !== CLAUDE_CONTENT_TYPES.THINKING) {
         // Close previous block
         if (state.currentContentIndex >= 0) {
@@ -919,12 +987,19 @@ export function convertOpenAIStreamToClaude(
 
     // Handle text content
     else if (delta.content) {
+      if (
+        state.currentContentType !== null &&
+        state.currentContentType !== CLAUDE_CONTENT_TYPES.TEXT
+      ) {
+        events.push({
+          type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
+          index: state.currentContentIndex,
+        });
+      }
+
       if (state.currentContentType !== CLAUDE_CONTENT_TYPES.TEXT) {
         // Close previous block
-        if (
-          state.currentContentIndex >= 0 &&
-          state.currentContentType !== CLAUDE_CONTENT_TYPES.THINKING
-        ) {
+        if (state.currentContentIndex >= 0) {
           events.push({
             type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
             index: state.currentContentIndex,
@@ -965,11 +1040,18 @@ export function convertOpenAIStreamToClaude(
 
         // Initialize tool call if new
         if (!state.toolCalls[idx]) {
-          // Close previous block
           if (
-            state.currentContentIndex >= 0 &&
-            state.currentContentType !== CLAUDE_CONTENT_TYPES.THINKING
+            state.currentContentType !== null &&
+            state.currentContentType !== CLAUDE_CONTENT_TYPES.TOOL_USE
           ) {
+            events.push({
+              type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
+              index: state.currentContentIndex,
+            });
+          }
+
+          // Close previous block
+          if (state.currentContentIndex >= 0) {
             events.push({
               type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
               index: state.currentContentIndex,
@@ -1137,12 +1219,10 @@ export async function handleOpenAIErrorResponse(
   response: Response,
 ): Promise<ClaudeErrorResponse> {
   const contentType = response.headers.get("content-type");
-  console.log("Error contentType: ", contentType);
 
   if (contentType && contentType.includes("application/json")) {
     try {
       const openAIError = (await response.json()) as OpenAIErrorResponse;
-      console.log("openAIError: ", openAIError);
       return convertOpenAIErrorToClaude(openAIError);
     } catch (e) {
       return {
@@ -1155,7 +1235,6 @@ export async function handleOpenAIErrorResponse(
     }
   } else if (contentType && contentType.includes("text/plain")) {
     const text = await response.text();
-    console.log("Error text: ", text);
     return {
       type: "error",
       error: {
