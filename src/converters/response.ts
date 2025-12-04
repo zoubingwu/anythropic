@@ -1,12 +1,16 @@
 import { ClaudeContent, ClaudeResponse, ClaudeUsage } from "../types/claude";
-import { Annotation, ChatUsage, TextResponse } from "../types/openai";
+import {
+  Annotation,
+  ChatUsage,
+  OpenAIChatCompletionsResponse,
+} from "../types/openai";
 import { CLAUDE_CONTENT_TYPES, CLAUDE_STOP_REASONS } from "./constants";
 
 /**
  * Convert OpenAI non-streaming response to Claude response
  */
 export function convertOpenAINonStreamToClaude(
-  openAIResponse: TextResponse,
+  openAIResponse: OpenAIChatCompletionsResponse,
 ): ClaudeResponse {
   const claudeResponse: ClaudeResponse = {
     id: openAIResponse.id || `msg_${Date.now()}`,

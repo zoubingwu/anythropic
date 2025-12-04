@@ -24,7 +24,7 @@ function convertOpenAIErrorTypeToClaude(openAIType: string): string {
   }
 }
 
-function convertOpenAIErrorToClaude(
+export function convertOpenAIErrorToClaude(
   openAIError: OpenAIErrorResponse,
 ): ClaudeErrorResponse {
   if (Array.isArray(openAIError)) {

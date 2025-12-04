@@ -120,7 +120,7 @@ export interface ChatUsage {
   };
 }
 
-export interface TextResponse {
+export interface OpenAIChatCompletionsResponse {
   id: string;
   object: "chat.completion";
   created: number;
@@ -146,7 +146,7 @@ export interface Annotation {
   };
 }
 
-export interface ChatCompletionsStreamResponse {
+export interface OpenAIChatCompletionsStreamResponse {
   id: string;
   object: "chat.completion.chunk";
   created: number;

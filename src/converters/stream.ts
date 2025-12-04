@@ -4,7 +4,10 @@ import {
   ClaudeUsage,
   StreamConversionState,
 } from "../types";
-import { ChatCompletionsStreamResponse, ChatUsage } from "../types/openai";
+import {
+  ChatUsage,
+  OpenAIChatCompletionsStreamResponse,
+} from "../types/openai";
 import {
   CLAUDE_CONTENT_TYPES,
   CLAUDE_DELTA_TYPES,
@@ -16,7 +19,7 @@ import {
  * Convert OpenAI streaming response to Claude streaming responses
  */
 export function convertOpenAIStreamToClaude(
-  openAIResponse: ChatCompletionsStreamResponse,
+  openAIResponse: OpenAIChatCompletionsStreamResponse,
   state: StreamConversionState,
 ): ClaudeStreamResponse[] {
   const events: ClaudeStreamResponse[] = [];
