@@ -132,25 +132,31 @@ export const handleCountTokens = async (c: any) => {
       input_tokens: tokenCount,
     });
   } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+    console.error("Error counting tokens:", error);
+    return c.json({ error: { message: error.message } }, 500);
   }
 };
 
 export const handleCountTokensDetailed = async (c: any) => {
-  const body = await c.req.json();
+  try {
+    const body = await c.req.json();
 
-  const tokenCount = countClaudeTokens({
-    model: body.model,
-    messages: body.messages,
-    system: body.system,
-    tools: body.tools,
-  });
+    const tokenCount = countClaudeTokens({
+      model: body.model,
+      messages: body.messages,
+      system: body.system,
+      tools: body.tools,
+    });
 
-  return c.json({
-    input_tokens: tokenCount,
-    model: body.model,
-    message_count: body.messages?.length || 0,
-    has_tools: !!body.tools,
-    has_system: !!body.system,
-  });
+    return c.json({
+      input_tokens: tokenCount,
+      model: body.model,
+      message_count: body.messages?.length || 0,
+      has_tools: !!body.tools,
+      has_system: !!body.system,
+    });
+  } catch (error: any) {
+    console.error("Error counting tokens detailed:", error);
+    return c.json({ error: { message: error.message } }, 500);
+  }
 };
