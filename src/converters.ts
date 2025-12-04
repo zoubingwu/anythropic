@@ -11,6 +11,10 @@ export interface OpenAIMessage {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
+  thinking?: {
+    content: string;
+    signature?: string;
+  };
 }
 
 type OpenAIErrorFromGemini = {
@@ -494,11 +498,31 @@ function convertClaudeMessagesToOpenAI(
 
       // Add the main message with content
       if (result.content || (result.toolCalls && result.toolCalls.length > 0)) {
-        openAIMessages.push({
+        const message: OpenAIMessage = {
           role: msg.role as "user" | "assistant",
           content: result.content,
           tool_calls: result.toolCalls,
-        });
+        };
+        // Pass thinking info for Gemini thoughtSignature support
+        if (result.thinking) {
+          message.thinking = result.thinking;
+          // Apply signature to first tool_call for Gemini OpenAI compatibility
+          if (
+            result.thinking.signature &&
+            result.toolCalls &&
+            result.toolCalls.length > 0
+          ) {
+            // Only set if not already set from tool_use block
+            if (!result.toolCalls[0].extra_content?.google?.thought_signature) {
+              result.toolCalls[0].extra_content = {
+                google: {
+                  thought_signature: result.thinking.signature,
+                },
+              };
+            }
+          }
+        }
+        openAIMessages.push(message);
       }
 
       // Add tool messages for tool_results
@@ -751,9 +775,14 @@ export function convertOpenAINonStreamToClaude(
 
     // Handle reasoning content (for o1 models)
     if (message.reasoning_content) {
+      // Extract thought signature from first tool call for Gemini (to include in thinking block)
+      const firstToolCallSignature =
+        message.tool_calls?.[0]?.extra_content?.google?.thought_signature;
+
       claudeResponse.content.push({
         type: "thinking",
         thinking: message.reasoning_content,
+        signature: firstToolCallSignature,
       });
     }
 
@@ -767,7 +796,8 @@ export function convertOpenAINonStreamToClaude(
 
     // Handle tool calls
     if (message.tool_calls) {
-      for (const toolCall of message.tool_calls) {
+      for (let i = 0; i < message.tool_calls.length; i++) {
+        const toolCall = message.tool_calls[i];
         let input: Record<string, any> = {};
         if (toolCall.function.arguments) {
           try {
@@ -784,8 +814,9 @@ export function convertOpenAINonStreamToClaude(
           input: input,
         };
 
-        // Preserve thought signature if present
-        if (toolCall.extra_content?.google?.thought_signature) {
+        // Preserve thought signature on tool_use block for Gemini
+        // Only the first tool call in each step has a signature
+        if (i === 0 && toolCall.extra_content?.google?.thought_signature) {
           content.signature = toolCall.extra_content.google.thought_signature;
         }
 
@@ -891,6 +922,8 @@ export interface StreamConversionState {
     name: string;
     input: string;
   }>;
+  sentThinkingSignature: boolean; // Track if we've sent a thinking block with signature
+  thinkingSignature?: string; // Store the signature for later use
 }
 
 /**
@@ -1038,6 +1071,16 @@ export function convertOpenAIStreamToClaude(
       for (const toolCall of delta.tool_calls) {
         const idx = toolCall.index || 0;
 
+        // Capture thought signature from first tool call (Gemini)
+        if (
+          idx === 0 &&
+          toolCall.extra_content?.google?.thought_signature &&
+          !state.thinkingSignature
+        ) {
+          state.thinkingSignature =
+            toolCall.extra_content.google.thought_signature;
+        }
+
         // Initialize tool call if new
         if (!state.toolCalls[idx]) {
           if (
@@ -1068,15 +1111,23 @@ export function convertOpenAIStreamToClaude(
             input: "",
           };
 
+          // Build content_block with signature for first tool call
+          const contentBlock: ClaudeContent = {
+            type: CLAUDE_CONTENT_TYPES.TOOL_USE,
+            id: state.toolCalls[idx].id,
+            name: state.toolCalls[idx].name,
+            input: {},
+          };
+
+          // Add signature to first tool call only
+          if (idx === 0 && state.thinkingSignature) {
+            contentBlock.signature = state.thinkingSignature;
+          }
+
           events.push({
             type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_START,
             index: state.currentContentIndex,
-            content_block: {
-              type: CLAUDE_CONTENT_TYPES.TOOL_USE,
-              id: state.toolCalls[idx].id,
-              name: state.toolCalls[idx].name,
-              input: {},
-            },
+            content_block: contentBlock,
           });
         }
 
@@ -1147,6 +1198,7 @@ export function createStreamState(): StreamConversionState {
     contentTexts: [],
     thinkingTexts: [],
     toolCalls: [],
+    sentThinkingSignature: false,
   };
 }
 
