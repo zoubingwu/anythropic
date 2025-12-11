@@ -31,4 +31,22 @@ app.get("/health", (c) => {
   return c.json({ status: "ok" });
 });
 
+app.get("/", (c) => {
+  return c.html(
+    `<!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Redirecting to GitHub</title>
+        <meta http-equiv="refresh" content="0; url='https://github.com/zoubingwu/anythropic#readme'" />
+      </head>
+      <body>
+        <p>Redirecting to GitHub repository README...</p>
+        <p>If you are not redirected automatically, <a href="https://github.com/zoubingwu/anythropic#readme">click here</a>.</p>
+      </body>
+    </html>`,
+  );
+});
+
 export default app;
