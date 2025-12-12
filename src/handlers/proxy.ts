@@ -28,17 +28,26 @@ export async function handleClaudeToOpenAI(c: any) {
       );
     }
 
+    const originalHeaders = c.req.header();
     const adapter = createAdapter(baseUrl);
     const claudeRequest = await c.req.json();
     const openaiRequest = adapter.transformRequest(claudeRequest);
     const authHeaders = await adapter.getAuthHeaders(apiKey);
 
     const targetUrl = `https://${baseUrl}${adapter.getCompletionPath()}`;
+
+    // Remove proxy authentication headers to prevent passing them upstream
+    const {
+      "x-api-key": _,
+      authorization: __,
+      ...headersWithoutAuth
+    } = originalHeaders;
+
     const openAIResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
+        ...headersWithoutAuth, // Pass through original headers in case some provider checks them( like kimi)
+        ...authHeaders, // Add upstream authentication
       },
       body: JSON.stringify(openaiRequest),
     });
@@ -62,7 +71,7 @@ export async function handleClaudeToOpenAI(c: any) {
     const claudeResponse = adapter.transformResponse(openAIResult);
     return c.json(claudeResponse, openAIResponse.status);
   } catch (error: any) {
-    console.log("Internal server error: ", error);
+    console.error("Internal server error: ", error);
     return c.json(
       { error: { message: `Internal server error: ${error.message}` } },
       500,
