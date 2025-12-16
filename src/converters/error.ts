@@ -28,6 +28,7 @@ export function convertOpenAIErrorToClaude(
   openAIError: OpenAIErrorResponse,
 ): ClaudeErrorResponse {
   if (Array.isArray(openAIError)) {
+    console.log("Converting array error response", openAIError);
     return {
       type: "error",
       error: {
@@ -36,6 +37,8 @@ export function convertOpenAIErrorToClaude(
       },
     };
   }
+
+  console.log("Converting error response", openAIError);
 
   return {
     type: "error",
@@ -63,7 +66,7 @@ export async function handleOpenAIErrorResponse(
     try {
       const openAIError = (await response.json()) as OpenAIErrorResponse;
       return convertOpenAIErrorToClaude(openAIError);
-    } catch (e) {
+    } catch (e: any) {
       return {
         type: "error",
         error: {
