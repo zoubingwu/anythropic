@@ -321,7 +321,7 @@ describe("converter e2e mocks", () => {
                 type: "function",
                 function: {
                   name: "lookup",
-                  arguments: "{\"a\":",
+                  arguments: '{"a":',
                 },
                 extra_content: {
                   google: {
@@ -382,7 +382,13 @@ describe("converter e2e mocks", () => {
     const events4 = convertOpenAIStreamToClaude(chunk4, state);
     const finalEvents = getFinalStreamEvents(state, chunk4.usage);
 
-    const all = [...events1, ...events2, ...events3, ...events4, ...finalEvents];
+    const all = [
+      ...events1,
+      ...events2,
+      ...events3,
+      ...events4,
+      ...finalEvents,
+    ];
 
     const start = all[0];
     expect(start.type).toBe("message_start");
@@ -390,7 +396,9 @@ describe("converter e2e mocks", () => {
     expect(all[1].type).toBe("ping");
 
     const thinkingStart = all.find(
-      (e) => e.type === "content_block_start" && e.content_block?.type === CLAUDE_CONTENT_TYPES.THINKING,
+      (e) =>
+        e.type === "content_block_start" &&
+        e.content_block?.type === CLAUDE_CONTENT_TYPES.THINKING,
     );
     const thinkingDelta = all.find(
       (e) => e.type === "content_block_delta" && e.delta?.thinking === "think-",
@@ -399,7 +407,9 @@ describe("converter e2e mocks", () => {
     expect(thinkingDelta).toBeDefined();
 
     const textStart = all.find(
-      (e) => e.type === "content_block_start" && e.content_block?.type === CLAUDE_CONTENT_TYPES.TEXT,
+      (e) =>
+        e.type === "content_block_start" &&
+        e.content_block?.type === CLAUDE_CONTENT_TYPES.TEXT,
     );
     const textDelta = all.find(
       (e) => e.type === "content_block_delta" && e.delta?.text === "hello ",
@@ -408,14 +418,18 @@ describe("converter e2e mocks", () => {
     expect(textDelta).toBeDefined();
 
     const toolStart = all.find(
-      (e) => e.type === "content_block_start" && e.content_block?.type === CLAUDE_CONTENT_TYPES.TOOL_USE,
+      (e) =>
+        e.type === "content_block_start" &&
+        e.content_block?.type === CLAUDE_CONTENT_TYPES.TOOL_USE,
     );
     const toolDeltaJson = all.filter(
       (e) => e.type === "content_block_delta" && e.delta?.partial_json,
     );
     expect(toolStart?.content_block?.id).toBe("call-1");
     expect(toolStart?.content_block?.signature).toBe("sig-stream");
-    expect(toolDeltaJson.map((e) => e.delta?.partial_json).join("")).toBe("{\"a\":1}");
+    expect(toolDeltaJson.map((e) => e.delta?.partial_json).join("")).toBe(
+      '{"a":1}',
+    );
 
     const messageDelta = all.find((e) => e.type === "message_delta");
     expect(messageDelta?.delta?.stop_reason).toBe(CLAUDE_STOP_REASONS.END_TURN);
