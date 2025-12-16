@@ -1,4 +1,4 @@
-import { ModelAdapter } from "../types";
+import { ModelAdapter } from "../types/adapter";
 import { CopilotAdapter } from "./copilot";
 import { GeminiAdapter } from "./gemini";
 import { OpenAIAdapter } from "./openai";

@@ -1,4 +1,4 @@
-import { getCopilotToken } from "../utils";
+import { getCopilotToken } from "../utils/auth";
 import { BaseAdapter } from "./base";
 
 export class CopilotAdapter extends BaseAdapter {

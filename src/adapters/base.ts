@@ -1,23 +1,23 @@
 import { stream } from "hono/streaming";
 import {
-  convertClaudeRequestToOpenAI,
-  convertOpenAINonStreamToClaude,
-  convertOpenAIStreamToClaude,
-  createStreamState,
-  getFinalStreamEvents,
-} from "../converters";
-import {
   convertOpenAIErrorToClaude,
   handleOpenAIErrorResponse,
 } from "../converters/error";
+import { convertClaudeRequestToOpenAI } from "../converters/request";
+import { convertOpenAINonStreamToClaude } from "../converters/response";
+import {
+  convertOpenAIStreamToClaude,
+  createStreamState,
+  getFinalStreamEvents,
+} from "../converters/stream";
+import { ModelAdapter } from "../types/adapter";
 import {
   ClaudeAnyContentRequest,
   ClaudeErrorResponse,
   ClaudeResponse,
   ClaudeStreamResponse,
-  ModelAdapter,
-  StreamConversionState,
-} from "../types";
+} from "../types/claude";
+import { StreamConversionState } from "../types/conversion";
 import {
   OpenAIChatCompletionsResponse,
   OpenAIChatCompletionsStreamResponse,

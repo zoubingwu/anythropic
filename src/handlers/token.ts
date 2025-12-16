@@ -1,5 +1,9 @@
 import { encodingForModel } from "js-tiktoken";
-import { ClaudeAnyContentMessage, ClaudeContent, ClaudeTool } from "../types";
+import {
+  ClaudeAnyContentMessage,
+  ClaudeContent,
+  ClaudeTool,
+} from "../types/claude";
 
 const getEncodingForModel = (modelName: string): string => {
   // Default to cl100k_base for all models

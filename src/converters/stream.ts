@@ -2,8 +2,8 @@ import {
   ClaudeContent,
   ClaudeStreamResponse,
   ClaudeUsage,
-  StreamConversionState,
-} from "../types";
+} from "../types/claude";
+import { StreamConversionState } from "../types/conversion";
 import {
   ChatUsage,
   OpenAIChatCompletionsStreamResponse,

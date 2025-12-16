@@ -1,6 +1,6 @@
-import { createAdapter } from "../adapters";
+import { createAdapter } from "../adapters/factory";
 import { OpenAIChatCompletionsResponse } from "../types/openai";
-import { extractBaseUrl } from "../utils";
+import { extractBaseUrl } from "../utils/url";
 
 export async function handleClaudeToOpenAI(c: any) {
   try {

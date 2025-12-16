@@ -3,8 +3,8 @@ import {
   ClaudeErrorResponse,
   ClaudeResponse,
   ClaudeStreamResponse,
-  StreamConversionState,
-} from "./index";
+} from "./claude";
+import { StreamConversionState } from "./conversion";
 import {
   OpenAIChatCompletionsResponse,
   OpenAIChatCompletionsStreamResponse,

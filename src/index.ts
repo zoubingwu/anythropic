@@ -1,10 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import {
-  handleClaudeToOpenAI,
-  handleCountTokens,
-  handleCountTokensDetailed,
-} from "./handlers";
+import { handleClaudeToOpenAI } from "./handlers/proxy";
+import { handleCountTokens, handleCountTokensDetailed } from "./handlers/token";
 
 const app = new Hono();
 
