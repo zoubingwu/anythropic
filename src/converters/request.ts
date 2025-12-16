@@ -115,7 +115,22 @@ function convertClaudeMessagesToOpenAI(
     } else if (Array.isArray(msg.content)) {
       const result = convertClaudeContentArray(msg.content, msg.role);
 
-      if (result.content || (result.toolCalls && result.toolCalls.length > 0)) {
+      const hasToolCalls =
+        result.toolCalls && result.toolCalls.length > 0 ? true : false;
+      const hasContent =
+        (result.content && result.content.length > 0) ||
+        (result.toolCalls && result.toolCalls.length > 0);
+      const hasToolMessages =
+        result.toolMessages && result.toolMessages.length > 0 ? true : false;
+
+      // Ensure tool call responses are placed immediately after the tool call step.
+      // For Claude payloads that bundle tool_result and new user text in the same message,
+      // we emit the tool messages first so Copilot/OpenAI validation sees the expected order.
+      if (hasToolMessages && !hasToolCalls) {
+        openAIMessages.push(...result.toolMessages!);
+      }
+
+      if (hasContent) {
         const message: OpenAIMessage = {
           role: msg.role as "user" | "assistant",
           content: result.content,
@@ -141,8 +156,8 @@ function convertClaudeMessagesToOpenAI(
         openAIMessages.push(message);
       }
 
-      if (result.toolMessages && result.toolMessages.length > 0) {
-        openAIMessages.push(...result.toolMessages);
+      if (hasToolMessages && hasToolCalls) {
+        openAIMessages.push(...result.toolMessages!);
       }
     }
   }
