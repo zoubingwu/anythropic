@@ -24,6 +24,15 @@ export function convertOpenAIStreamToClaude(
 ): ClaudeStreamResponse[] {
   const events: ClaudeStreamResponse[] = [];
 
+  const stopCurrentBlock = () => {
+    if (state.currentContentIndex >= 0) {
+      events.push({
+        type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
+        index: state.currentContentIndex,
+      });
+    }
+  };
+
   // Generate message_id if not exists
   if (!state.messageId) {
     state.messageId = `msg_${Date.now()}`;
@@ -57,28 +66,17 @@ export function convertOpenAIStreamToClaude(
 
   // Process each choice
   for (const choice of openAIResponse.choices) {
+    // We only support a single streaming choice; extra choices would duplicate content
+    if (choice.index !== 0) {
+      continue;
+    }
+
     const delta = choice.delta;
 
     // Handle reasoning/thinking content
     if (delta.reasoning_content) {
-      if (
-        state.currentContentType !== null &&
-        state.currentContentType !== CLAUDE_CONTENT_TYPES.THINKING
-      ) {
-        events.push({
-          type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
-          index: state.currentContentIndex,
-        });
-      }
-
       if (state.currentContentType !== CLAUDE_CONTENT_TYPES.THINKING) {
-        // Close previous block
-        if (state.currentContentIndex >= 0) {
-          events.push({
-            type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
-            index: state.currentContentIndex,
-          });
-        }
+        stopCurrentBlock();
 
         // Start new thinking block
         state.currentContentIndex++;
@@ -109,24 +107,8 @@ export function convertOpenAIStreamToClaude(
 
     // Handle text content
     else if (delta.content) {
-      if (
-        state.currentContentType !== null &&
-        state.currentContentType !== CLAUDE_CONTENT_TYPES.TEXT
-      ) {
-        events.push({
-          type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
-          index: state.currentContentIndex,
-        });
-      }
-
       if (state.currentContentType !== CLAUDE_CONTENT_TYPES.TEXT) {
-        // Close previous block
-        if (state.currentContentIndex >= 0) {
-          events.push({
-            type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
-            index: state.currentContentIndex,
-          });
-        }
+        stopCurrentBlock();
 
         // Start new text block
         state.currentContentIndex++;
@@ -172,23 +154,7 @@ export function convertOpenAIStreamToClaude(
 
         // Initialize tool call if new
         if (!state.toolCalls[idx]) {
-          if (
-            state.currentContentType !== null &&
-            state.currentContentType !== CLAUDE_CONTENT_TYPES.TOOL_USE
-          ) {
-            events.push({
-              type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
-              index: state.currentContentIndex,
-            });
-          }
-
-          // Close previous block
-          if (state.currentContentIndex >= 0) {
-            events.push({
-              type: CLAUDE_STREAM_TYPES.CONTENT_BLOCK_STOP,
-              index: state.currentContentIndex,
-            });
-          }
+          stopCurrentBlock();
 
           state.currentContentIndex++;
           state.currentContentType = CLAUDE_CONTENT_TYPES.TOOL_USE;
