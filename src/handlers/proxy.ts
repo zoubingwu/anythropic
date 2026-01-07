@@ -63,13 +63,23 @@ export async function handleClaudeToOpenAI(c: any) {
     }
 
     if (openaiRequest.stream) {
-      return adapter.handleStreamResponse(c, openAIResponse);
+      // Pass model information to stream handler
+      return adapter.handleStreamResponse(
+        c,
+        openAIResponse,
+        openaiRequest.model,
+      );
     }
 
     // Handle Kiro adapter specially since it returns AWS Event Stream format
     if (adapter.provider === "kiro") {
-      const kiroResponse = await (adapter as any).parseKiroResponse(openAIResponse);
-      const claudeResponse = adapter.transformResponse(kiroResponse);
+      const kiroResponse = await (adapter as any).parseKiroResponse(
+        openAIResponse,
+      );
+      const claudeResponse = adapter.transformResponse(
+        kiroResponse,
+        openaiRequest.model,
+      );
       return c.json(claudeResponse, openAIResponse.status);
     }
 

@@ -1,4 +1,10 @@
-import { getKiroToken } from "../utils/auth";
+import { stream } from "hono/streaming";
+import {
+  convertOpenAIStreamToClaude,
+  createStreamState,
+  getFinalStreamEvents,
+} from "../converters/stream";
+import { OpenAIChatCompletionsStreamResponse } from "../types/openai";
 import { BaseAdapter } from "./base";
 
 /**
@@ -15,16 +21,16 @@ class AwsEventStreamParser {
 
     // Look for JSON patterns in the buffer
     const patterns = [
-      { pattern: '{"content":', type: 'content' },
-      { pattern: '{"name":', type: 'tool_start' },
-      { pattern: '{"input":', type: 'tool_input' },
-      { pattern: '{"usage":', type: 'usage' },
+      { pattern: '{"content":', type: "content" },
+      { pattern: '{"name":', type: "tool_start" },
+      { pattern: '{"input":', type: "tool_input" },
+      { pattern: '{"usage":', type: "usage" },
     ];
 
     while (true) {
       let earliestPos = -1;
-      let earliestType = '';
-      let earliestPattern = '';
+      let earliestType = "";
+      let earliestPattern = "";
 
       // Find the earliest matching pattern
       for (const { pattern, type } of patterns) {
@@ -46,10 +52,10 @@ class AwsEventStreamParser {
       let foundStart = false;
 
       for (let i = earliestPos; i < this.buffer.length; i++) {
-        if (this.buffer[i] === '{') {
+        if (this.buffer[i] === "{") {
           braceCount++;
           foundStart = true;
-        } else if (this.buffer[i] === '}') {
+        } else if (this.buffer[i] === "}") {
           braceCount--;
           if (braceCount === 0 && foundStart) {
             jsonEnd = i;
@@ -74,7 +80,7 @@ class AwsEventStreamParser {
           events.push(event);
         }
       } catch (e) {
-        console.warn('Failed to parse JSON event:', jsonStr.substring(0, 100));
+        console.warn("Failed to parse JSON event:", jsonStr.substring(0, 100));
       }
     }
 
@@ -82,13 +88,13 @@ class AwsEventStreamParser {
   }
 
   private _processEvent(data: any, eventType: string): any | null {
-    if (eventType === 'content') {
+    if (eventType === "content") {
       return this._processContentEvent(data);
-    } else if (eventType === 'tool_start') {
+    } else if (eventType === "tool_start") {
       return this._processToolStartEvent(data);
-    } else if (eventType === 'tool_input') {
+    } else if (eventType === "tool_input") {
       return this._processToolInputEvent(data);
-    } else if (eventType === 'usage') {
+    } else if (eventType === "usage") {
       return this._processUsageEvent(data);
     }
     return null;
@@ -99,19 +105,19 @@ class AwsEventStreamParser {
     if (!content) {
       return null;
     }
-    return { type: 'content', data: content };
+    return { type: "content", data: content };
   }
 
   private _processToolStartEvent(data: any): any | null {
-    return { type: 'tool_start', data: data };
+    return { type: "tool_start", data: data };
   }
 
   private _processToolInputEvent(data: any): any | null {
-    return { type: 'tool_input', data: data };
+    return { type: "tool_input", data: data };
   }
 
   private _processUsageEvent(data: any): any | null {
-    return { type: 'usage', data: data.usage || data };
+    return { type: "usage", data: data.usage || data };
   }
 
   getBuffer(): string {
@@ -139,6 +145,84 @@ export class KiroAdapter extends BaseAdapter {
   }
 
   /**
+   * Handle streaming response from Kiro API (AWS Event Stream format)
+   */
+  async handleStreamResponse(
+    c: any,
+    openAIResponse: Response,
+    model: string = "claude-4-5-sonnet",
+  ): Promise<any> {
+    const state = createStreamState();
+    c.header("Content-Type", "text/event-stream");
+
+    const parser = new AwsEventStreamParser();
+    const reader = openAIResponse.body!.getReader();
+    const decoder = new TextDecoder();
+    let finalUsage: any = undefined;
+
+    return stream(c, async (streamWriter) => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const events = parser.feed(chunk);
+
+          for (const event of events) {
+            if (event.type === "content") {
+              // Convert Kiro content event to OpenAI stream format
+              const openAIChunk: OpenAIChatCompletionsStreamResponse = {
+                id: `chatcmpl-${Date.now()}`,
+                object: "chat.completion.chunk",
+                created: Math.floor(Date.now() / 1000),
+                model: model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      content: event.data,
+                    },
+                    finish_reason: null,
+                  },
+                ],
+              };
+
+              // Convert to Claude stream format
+              const claudeEvents = convertOpenAIStreamToClaude(
+                openAIChunk,
+                state,
+              );
+
+              // Write events to stream
+              for (const event of claudeEvents) {
+                await streamWriter.write(
+                  `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                );
+              }
+            } else if (event.type === "usage") {
+              finalUsage = event.data;
+            }
+          }
+        }
+
+        // Send final events
+        const finalEvents = getFinalStreamEvents(state, finalUsage);
+        for (const event of finalEvents) {
+          await streamWriter.write(
+            `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          );
+        }
+
+        await streamWriter.write("data: [DONE]\n\n");
+      } finally {
+        reader.releaseLock();
+        await streamWriter.close();
+      }
+    });
+  }
+
+  /**
    * Parse Kiro API response (AWS Event Stream format) into a complete response object
    */
   async parseKiroResponse(response: Response): Promise<any> {
@@ -149,7 +233,7 @@ export class KiroAdapter extends BaseAdapter {
     let completeResponse: any = {
       content: "",
       tool_calls: [],
-      usage: { prompt_tokens: 0, completion_tokens: 0 }
+      usage: { prompt_tokens: 0, completion_tokens: 0 },
     };
 
     try {
@@ -169,13 +253,13 @@ export class KiroAdapter extends BaseAdapter {
               type: "function",
               function: {
                 name: event.data.name,
-                arguments: ""
-              }
+                arguments: "",
+              },
             });
           } else if (event.type === "tool_input" && event.data) {
             // Find the tool call and append arguments
             const toolCall = completeResponse.tool_calls.find(
-              (tc: any) => tc.id === event.data.toolUseId
+              (tc: any) => tc.id === event.data.toolUseId,
             );
             if (toolCall) {
               toolCall.function.arguments += event.data.input;
@@ -183,7 +267,7 @@ export class KiroAdapter extends BaseAdapter {
           } else if (event.type === "usage" && event.data) {
             completeResponse.usage = {
               prompt_tokens: event.data.promptTokens || 0,
-              completion_tokens: event.data.completionTokens || 0
+              completion_tokens: event.data.completionTokens || 0,
             };
           }
         }
@@ -228,7 +312,7 @@ export class KiroAdapter extends BaseAdapter {
   transformRequest(claudeRequest: any): any {
     const messages = claudeRequest.messages || [];
     const system = claudeRequest.system || "";
-    const model = claudeRequest.model || "claude-3-5-sonnet-20241022";
+    const model = claudeRequest.model || "claude-4-5-sonnet";
 
     // Build conversation history in Kiro format
     const history: any[] = [];
@@ -326,7 +410,7 @@ export class KiroAdapter extends BaseAdapter {
       type: "message",
       role: "assistant",
       content: anthropicContent,
-      model: "claude-3-5-sonnet-20241022",
+      model: "claude-4-5-sonnet",
       stop_reason: toolCalls.length > 0 ? "tool_use" : "end_turn",
       usage: {
         input_tokens: kiroResponse.usage?.prompt_tokens || 0,

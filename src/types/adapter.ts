@@ -19,6 +19,7 @@ export interface ModelAdapter {
 
   transformResponse(
     openaiResponse: OpenAIChatCompletionsResponse,
+    model?: string,
   ): ClaudeResponse;
 
   transformStreamResponse(
@@ -30,7 +31,11 @@ export interface ModelAdapter {
 
   transformHttpError(response: Response): Promise<ClaudeErrorResponse>;
 
-  handleStreamResponse(c: any, openAIResponse: Response): Promise<any>;
+  handleStreamResponse(
+    c: any,
+    openAIResponse: Response,
+    model?: string,
+  ): Promise<any>;
 
   getAuthHeaders(apiKey: string): Promise<Record<string, string>>;
 
