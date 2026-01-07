@@ -66,6 +66,14 @@ export async function handleClaudeToOpenAI(c: any) {
       return adapter.handleStreamResponse(c, openAIResponse);
     }
 
+    // Handle Kiro adapter specially since it returns AWS Event Stream format
+    if (adapter.provider === "kiro") {
+      const kiroResponse = await (adapter as any).parseKiroResponse(openAIResponse);
+      const claudeResponse = adapter.transformResponse(kiroResponse);
+      return c.json(claudeResponse, openAIResponse.status);
+    }
+
+    // Default handling for other adapters
     const openAIResult: OpenAIChatCompletionsResponse =
       await openAIResponse.json();
     const claudeResponse = adapter.transformResponse(openAIResult);
