@@ -30,6 +30,39 @@ export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/api.githubcopilot
 export ANTHROPIC_AUTH_TOKEN=you personal access token
 export ANTHROPIC_MODEL=grok-code-fast-1
 export ANTHROPIC_SMALL_FAST_MODEL=grok-code-fast-1
+
+# for q/kiro
+export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/q.us-east-1.amazonaws.com"
+export ANTHROPIC_AUTH_TOKEN=your_kiro_token
+```
+
+### Kiro Authentication Setup
+
+For Amazon Q/Kiro, use `scripts/get_kiro_token.zsh` to get token
+
+```bash
+# Make the script executable (first time only)
+chmod +x get_kiro_token.zsh
+
+# Extract and set your tokens directly
+source get_kiro_token.zsh
+```
+
+The script will automatically extract your token from the Kiro CLI database and then set all required environment variables.
+
+Example usage in your `.zshrc`:
+```bash
+function cc_kiro() {
+    get_kiro_token
+    export ANTHROPIC_BASE_URL="$ANYTHROPIC_HOST/q.us-east-1.amazonaws.com"
+    export ANTHROPIC_MODEL="claude-opus-4.5"
+    export ANTHROPIC_SMALL_FAST_MODEL="claude-haiku-4.5"
+    export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4.5"
+    export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4.5"
+    export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4.5"
+    export CLAUDE_CODE_SUBAGENT_MODEL="claude-sonnet-4.5"
+    claude
+}
 ```
 
 > [!TIP]
@@ -54,6 +87,12 @@ cc() {
     copilot)
         export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/api.githubcopilot.com"
         ...
+        claude
+        ;;
+    kiro)
+        export ANTHROPIC_BASE_URL="https://anythropic.web7.workers.dev/codewhisperer.us-east-1.amazonaws.com"
+        export ANTHROPIC_AUTH_TOKEN=your_kiro_refresh_token
+        export ANTHROPIC_MODEL="claude-3-5-sonnet-20241022"
         claude
         ;;
     *)
