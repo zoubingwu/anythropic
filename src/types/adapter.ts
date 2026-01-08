@@ -31,6 +31,11 @@ export interface ModelAdapter {
 
   transformHttpError(response: Response): Promise<ClaudeErrorResponse>;
 
+  /**
+   * Non-streaming
+   */
+  handleJsonResponse(res: Response): Promise<OpenAIChatCompletionsResponse>;
+
   handleStreamResponse(
     c: any,
     openAIResponse: Response,

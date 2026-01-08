@@ -31,6 +31,7 @@ export async function handleClaudeToOpenAI(c: any) {
     const originalHeaders = c.req.header();
     const adapter = createAdapter(baseUrl);
     const claudeRequest = await c.req.json();
+    console.log("claudeRequest: ", claudeRequest);
     const openaiRequest = adapter.transformRequest(claudeRequest);
     const authHeaders = await adapter.getAuthHeaders(apiKey);
 
@@ -62,6 +63,7 @@ export async function handleClaudeToOpenAI(c: any) {
       return c.json(claudeError, openAIResponse.status);
     }
 
+    console.log("check stream", openaiRequest);
     if (openaiRequest.stream) {
       // Pass model information to stream handler
       return adapter.handleStreamResponse(
@@ -73,19 +75,16 @@ export async function handleClaudeToOpenAI(c: any) {
 
     // Handle Kiro adapter specially since it returns AWS Event Stream format
     if (adapter.provider === "kiro") {
-      const kiroResponse = await (adapter as any).parseKiroResponse(
+      return adapter.handleStreamResponse(
+        c,
         openAIResponse,
-      );
-      const claudeResponse = adapter.transformResponse(
-        kiroResponse,
         openaiRequest.model,
       );
-      return c.json(claudeResponse, openAIResponse.status);
     }
 
     // Default handling for other adapters
     const openAIResult: OpenAIChatCompletionsResponse =
-      await openAIResponse.json();
+      await adapter.handleJsonResponse(openAIResponse);
     const claudeResponse = adapter.transformResponse(openAIResult);
     return c.json(claudeResponse, openAIResponse.status);
   } catch (error: any) {

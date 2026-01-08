@@ -31,15 +31,27 @@ export interface ClaudeContent {
   signature?: string;
 }
 
+export interface ClaudeToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string | Record<string, any>;
+  };
+}
+
 export interface ClaudeAnyContentMessage {
   role: "user" | "assistant";
   content: string | ClaudeContent[] | any;
+  cache_control?: ClaudeCacheControl;
+  tool_calls?: ClaudeToolCall[];
 }
 
 export interface ClaudeInputSchema {
   type: string;
   properties?: Record<string, any>;
-  required?: string[] | any[];
+  required?: string[];
+  $schema?: string;
 }
 
 export interface ClaudeTool {
@@ -61,6 +73,7 @@ export interface ClaudeTool {
     country?: string;
     timezone?: string;
   };
+  inputSchema?: { json: ClaudeInputSchema }; // For Kiro compatibility
 }
 
 export interface ClaudeThinking {
@@ -82,6 +95,7 @@ export interface ClaudeAnyContentRequest {
   stream?: boolean;
   stop_sequences?: string[];
   thinking?: ClaudeThinking;
+  metadata?: Record<string, any>;
 }
 
 export interface ClaudeUsage {

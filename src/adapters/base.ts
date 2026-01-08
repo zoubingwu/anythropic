@@ -55,6 +55,10 @@ export abstract class BaseAdapter implements ModelAdapter {
     return this.transformError(errorData);
   }
 
+  async handleJsonResponse(openaiResponse: Response) {
+    return (await openaiResponse.json()) as OpenAIChatCompletionsResponse;
+  }
+
   async handleStreamResponse(c: any, openAIResponse: Response): Promise<any> {
     const state = createStreamState();
     c.header("Content-Type", "text/event-stream");
