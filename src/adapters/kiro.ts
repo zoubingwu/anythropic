@@ -161,9 +161,15 @@ class AwsEventStreamParser {
 
     // Deduplicate repeating content
     if (content === this.lastContent) {
+      console.debug(
+        `[AwsEventStreamParser] Skipping duplicate content: "${content.substring(0, 50)}..."`,
+      );
       return null;
     }
 
+    console.debug(
+      `[AwsEventStreamParser] Content event: "${content.substring(0, 100)}..." (prev was: "${this.lastContent?.substring(0, 50) || "null"}...")`,
+    );
     this.lastContent = content;
     return { type: "content", data: content };
   }
@@ -423,6 +429,9 @@ export class KiroAdapter extends BaseAdapter {
               };
 
               const contentDeltaData = `event: ${contentDeltaEvent.type}\ndata: ${JSON.stringify(contentDeltaEvent)}\n\n`;
+              console.debug(
+                `[KiroAdapter] Writing delta at ${Date.now()}: "${event.data.substring(0, 20)}..."`,
+              );
               await writer.write(encoder.encode(contentDeltaData));
             } else if (event.type === "usage") {
               finalUsage = event.data;
