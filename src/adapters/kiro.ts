@@ -17,6 +17,12 @@ class AwsEventStreamParser {
   private lastContent: string | null = null;
   private currentToolCall: any = null;
   private toolCalls: any[] = [];
+  private decoder: TextDecoder;
+
+  constructor() {
+    // Use stream mode to handle multi-byte UTF-8 chars split across chunks
+    this.decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: false });
+  }
 
   // Patterns for finding JSON events (ordered by priority)
   private EVENT_PATTERNS = [
@@ -31,8 +37,9 @@ class AwsEventStreamParser {
 
   feed(chunk: Uint8Array): any[] {
     // Decode chunk to string and append to buffer
+    // Use stream: true to handle multi-byte UTF-8 chars split across chunks
     try {
-      const textChunk = new TextDecoder().decode(chunk);
+      const textChunk = this.decoder.decode(chunk, { stream: true });
       this.buffer += textChunk;
     } catch (e) {
       console.warn("[AwsEventStreamParser] Failed to decode chunk:", e);
@@ -302,6 +309,8 @@ class AwsEventStreamParser {
     this.lastContent = null;
     this.currentToolCall = null;
     this.toolCalls = [];
+    // Reset decoder to clear any buffered incomplete sequences
+    this.decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: false });
   }
 }
 
