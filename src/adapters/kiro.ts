@@ -1,10 +1,5 @@
-import {
-  convertOpenAIStreamToClaude,
-  createStreamState,
-  getFinalStreamEvents,
-} from "../converters/stream";
-import { ClaudeAnyContentRequest, ClaudeToolCall } from "../types/claude";
-import { OpenAIChatCompletionsStreamResponse } from "../types/openai";
+import { createStreamState } from "../converters/stream";
+import { ClaudeAnyContentRequest } from "../types/claude";
 import { BaseAdapter } from "./base";
 
 /**
@@ -911,13 +906,66 @@ export class KiroAdapter extends BaseAdapter {
     for (const item of content) {
       if (item.type === "tool_result") {
         toolResults.push({
-          content: [{ text: item.content || "" }],
+          content: [{ text: this.extractToolResultContent(item.content) }],
           status: "success",
           toolUseId: item.tool_call_id || item.tool_use_id || "",
         });
       }
     }
     return toolResults;
+  }
+
+  private extractToolResultContent(content: any): string {
+    if (content == null) return "(empty result)";
+
+    if (typeof content === "string") return content;
+
+    if (Array.isArray(content)) {
+      const parts: string[] = [];
+      for (const item of content) {
+        if (typeof item === "string") {
+          parts.push(item);
+          continue;
+        }
+
+        if (Array.isArray(item)) {
+          const nested = this.extractToolResultContent(item);
+          if (nested) parts.push(nested);
+          continue;
+        }
+
+        if (item && typeof item === "object") {
+          if (item.type === "text") {
+            if (typeof item.text === "string") {
+              parts.push(item.text);
+            } else if (Array.isArray(item.text)) {
+              const nested = this.extractToolResultContent(item.text);
+              if (nested) parts.push(nested);
+            } else if (item.text != null) {
+              parts.push(String(item.text));
+            }
+            continue;
+          }
+
+          if ("text" in item) {
+            const textVal = (item as any).text;
+            if (typeof textVal === "string") {
+              parts.push(textVal);
+            } else if (Array.isArray(textVal)) {
+              const nested = this.extractToolResultContent(textVal);
+              if (nested) parts.push(nested);
+            } else if (textVal != null) {
+              parts.push(String(textVal));
+            }
+            continue;
+          }
+        }
+      }
+
+      return parts.filter(Boolean).join("\n\n");
+    }
+
+    return String(content);
   }
 
   private mapModelToKiro(model: string): string {
