@@ -54,10 +54,41 @@ export async function handleClaudeToOpenAI(c: any) {
     });
 
     if (!openAIResponse.ok) {
+      const responseClone = openAIResponse.clone();
+      const responseContentType =
+        responseClone.headers.get("content-type") || "";
+      let responseBody: unknown = undefined;
+
+      try {
+        if (responseContentType.includes("application/json")) {
+          responseBody = await responseClone.json();
+        } else {
+          responseBody = await responseClone.text();
+        }
+      } catch (readError: any) {
+        responseBody = {
+          error: "Failed to read upstream response body",
+          message: readError?.message || String(readError),
+        };
+      }
+
       console.log("http error from upstream: ", {
-        url: openAIResponse.url,
-        model: openaiRequest.model,
-        status: openAIResponse.status,
+        request: {
+          url: targetUrl,
+          method: "POST",
+          headers: {
+            ...headersWithoutAuth,
+            ...authHeaders,
+          },
+          body: openaiRequest,
+        },
+        response: {
+          url: openAIResponse.url,
+          status: openAIResponse.status,
+          statusText: openAIResponse.statusText,
+          headers: Object.fromEntries(openAIResponse.headers.entries()),
+          body: responseBody,
+        },
       });
       const claudeError = await adapter.transformHttpError(openAIResponse);
       return c.json(claudeError, openAIResponse.status);
